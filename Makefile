@@ -2,8 +2,6 @@
 test:
 	go test -count=1 ./core/... -v
 
-test-fixer:
-	go test -count=1 ./errfmtfixer/... -v
-
+.PHONY: install
 install:
 	GOBIN=$(CURDIR)/bin go install ./...

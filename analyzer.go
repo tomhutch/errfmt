@@ -1,4 +1,4 @@
-package core
+package main
 
 import (
 	"fmt"
@@ -17,7 +17,6 @@ type Config struct {
 	// For example, an errWrapSig of `[]string{"stacktrace.Propagate("}` will validate errors
 	// messages passed to the stacktrace package's Propagate function:
 	ErrWrapSigs []string `mapstructure:"ignoreSigs" yaml:"ignoreSigs"`
-	EnableFixer bool
 }
 
 func NewDefaultConfig() Config {
