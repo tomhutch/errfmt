@@ -5,8 +5,6 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
-	"io/fs"
-	"os"
 	"reflect"
 	"strings"
 
@@ -49,7 +47,6 @@ func NewAnalyzer(cfg Config) *analysis.Analyzer {
 func run(cfg Config) func(*analysis.Pass) (interface{}, error) {
 	return func(pass *analysis.Pass) (interface{}, error) {
 		for _, file := range pass.Files {
-			editOffset := 0
 			ast.Inspect(file, func(n ast.Node) bool {
 				ret, ok := n.(*ast.ReturnStmt)
 				if !ok {
@@ -71,7 +68,7 @@ func run(cfg Config) func(*analysis.Pass) (interface{}, error) {
 						// tuple check is required.
 
 						if isError(pass.TypesInfo.TypeOf(expr)) {
-							editOffset += checkCallExpr(pass, retFn, retFn.Pos(), cfg, file, editOffset)
+							checkCallExpr(pass, retFn, retFn.Pos(), cfg, file)
 							return true
 						}
 
@@ -89,7 +86,7 @@ func run(cfg Config) func(*analysis.Pass) (interface{}, error) {
 								return true
 							}
 							if isError(v.Type()) {
-								editOffset += checkCallExpr(pass, retFn, expr.Pos(), cfg, file, editOffset)
+								checkCallExpr(pass, retFn, expr.Pos(), cfg, file)
 								return true
 							}
 						}
@@ -151,7 +148,7 @@ func run(cfg Config) func(*analysis.Pass) (interface{}, error) {
 						return true
 					}
 
-					editOffset += checkCallExpr(pass, call, ident.NamePos, cfg, file, editOffset)
+					checkCallExpr(pass, call, ident.NamePos, cfg, file)
 				}
 
 				return true
@@ -162,10 +159,10 @@ func run(cfg Config) func(*analysis.Pass) (interface{}, error) {
 	}
 }
 
-func checkCallExpr(pass *analysis.Pass, call *ast.CallExpr, tokenPos token.Pos, cfg Config, file *ast.File, editOffset int) int {
+func checkCallExpr(pass *analysis.Pass, call *ast.CallExpr, tokenPos token.Pos, cfg Config, file *ast.File) {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
-		return 0
+		return
 	}
 	fnSig := pass.TypesInfo.ObjectOf(sel.Sel).String()
 	if contains(cfg.ErrWrapSigs, fnSig) {
@@ -173,70 +170,47 @@ func checkCallExpr(pass *analysis.Pass, call *ast.CallExpr, tokenPos token.Pos, 
 			// Find upstream function call that assigned the error.
 			upstreamFnCall := findUpstreamFnCall(pass, call, file)
 			if upstreamFnCall == nil {
-				return 0
+				return
 			}
 
 			prefixParts := crawlExprSelectorChain(pass, upstreamFnCall.Fun)
 
 			arg, ok := call.Args[0].(*ast.BasicLit)
 			if ok {
-				if cfg.EnableFixer {
-					editOffsetDelta := fixErrorFormat(pass, prefixParts, arg, editOffset)
-					return editOffsetDelta
-				} else {
-					validateErrorFormat(pass, prefixParts, arg, tokenPos)
-					return 0
-				}
+				validateErrorFormat(pass, prefixParts, arg, tokenPos)
 			}
 		}
 	}
-	return 0
 }
 
 func validateErrorFormat(pass *analysis.Pass, prefixParts []string, arg *ast.BasicLit, tokenPos token.Pos) {
 	expected := fmt.Sprintf("\"%s", strings.Join(prefixParts, "."))
 
 	// Inspect message passed to error wrapping function (e.g. fmt.Sprintf("error message: %w", err)).
-	if !strings.HasPrefix(arg.Value, expected) {
-		pass.Reportf(tokenPos, "error message not prefixed in expected format (value = [%s], expected = \"[%s\"])", arg.Value, expected)
-	}
-}
-
-func fixErrorFormat(pass *analysis.Pass, prefixParts []string, arg *ast.BasicLit, editOffset int) int {
-	expected := fmt.Sprintf("\"%s", strings.Join(prefixParts, "."))
-
-	// Inspect message passed to error wrapping function (e.g. fmt.Sprintf("error message: %w", err)).
 	if strings.HasPrefix(arg.Value, expected) {
-		return 0
+		return
 	}
 
-	pos := pass.Fset.Position(arg.Pos())
-	contents, err := os.ReadFile(pos.Filename)
-	if err != nil {
-		panic(err)
+	msg := fmt.Sprintf("error message not prefixed in expected format (value = [%s], expected = \"[%s\"])", arg.Value, expected)
+	suggestedFixText := fmt.Sprintf("%s: %%w\"", expected)
+	suggestedFix := analysis.SuggestedFix{
+		Message: "try this",
+		TextEdits: []analysis.TextEdit{
+			{
+				Pos:     arg.Pos(),
+				End:     arg.End(),
+				NewText: []byte(suggestedFixText),
+			},
+		},
 	}
-
-	start := pass.Fset.Position(arg.Pos()).Offset + editOffset
-	end := pass.Fset.Position(arg.End()).Offset + editOffset
-
-	newErrMsg := fmt.Sprintf("%s: %%w\"", expected)
-
-	contents = append(
-		contents[:start],
-		append(
-			[]byte(newErrMsg),
-			contents[end:]...,
-		)...,
-	)
-
-	err = os.WriteFile(pos.Filename, contents, fs.ModeAppend)
-	if err != nil {
-		panic(err)
-	}
-
-	oldMsgLength := end - start
-	editOffsetDelta := len(newErrMsg) - oldMsgLength
-	return editOffsetDelta
+	pass.Report(analysis.Diagnostic{
+		Pos:            arg.Pos(),
+		End:            0,
+		Category:       "",
+		Message:        msg,
+		SuggestedFixes: []analysis.SuggestedFix{suggestedFix},
+		Related:        nil,
+	})
 }
 
 func findUpstreamFnCall(pass *analysis.Pass, call *ast.CallExpr, file *ast.File) *ast.CallExpr {

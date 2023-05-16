@@ -16,7 +16,7 @@ func okFormat() error {
 func badFormat() error {
 	_, err := fmt.Scanf("")
 	if err != nil {
-		return fmt.Errorf("fmt.Scanf: %w", err) // want `error message not prefixed in expected format`
+		return fmt.Errorf("scanf failed: %w", err) // want `error message not prefixed in expected format`
 	}
 
 	return nil
