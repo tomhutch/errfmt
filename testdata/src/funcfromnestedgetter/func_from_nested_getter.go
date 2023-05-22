@@ -5,13 +5,15 @@ import (
 	"os"
 )
 
+type errFn func(string) error
+
 type fnGetter struct {
-	GetFn func() func(string) error
+	GetFn func() errFn
 }
 
 func okFormat() error {
-	nestedGetter := func() func(string) error { return os.Chdir }
-	f := fnGetter{GetFn: nestedGetter}
+	nestedGetter := func(s string) error { return os.Chdir(s) }
+	f := fnGetter{GetFn: func() errFn { return nestedGetter }}
 	err := f.GetFn()("")
 	if err != nil {
 		return fmt.Errorf("f.GetFn: %w", err)
@@ -21,8 +23,8 @@ func okFormat() error {
 }
 
 func badFormat() error {
-	nestedGetter := func() func(string) error { return os.Chdir }
-	f := fnGetter{GetFn: nestedGetter}
+	nestedGetter := func(s string) error { return os.Chdir(s) }
+	f := fnGetter{GetFn: func() errFn { return nestedGetter }}
 	err := f.GetFn()("")
 	if err != nil {
 		return fmt.Errorf("failed to GetFn: %w", err) // want `error message not prefixed in expected format`
