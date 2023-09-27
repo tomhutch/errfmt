@@ -263,6 +263,24 @@ func crawlExprSelectorChain(pass *analysis.Pass, sel ast.Expr) []string {
 		return []string{ident.Name}
 	}
 
+	basicLit, ok := sel.(*ast.BasicLit)
+	if ok {
+		return []string{basicLit.Value}
+	}
+
+	indexExpr, ok := sel.(*ast.IndexExpr)
+	if ok {
+		indexExprIndex := crawlExprSelectorChain(pass, indexExpr.Index)
+		indexExprs := append(crawlExprSelectorChain(pass, indexExpr.X), indexExprIndex...)
+		for i := range indexExprs {
+			indexExprs[i] = strings.Replace(indexExprs[i], "\"", "", -1)
+			if i != 0 {
+				indexExprs[i] = fmt.Sprintf("[%s]", indexExprs[i])
+			}
+		}
+		return []string{strings.Join(indexExprs, "")}
+	}
+
 	return nil
 }
 

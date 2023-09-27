@@ -15,6 +15,7 @@ func TestAll(t *testing.T) {
 		{name: "different package method", packageName: "differentpkgmethod"},
 		{name: "error not wrapped", packageName: "errnotwrapped"},
 		{name: "func from getter", packageName: "funcfromgetter"},
+		{name: "func from map", packageName: "funcfrommap"},
 		{name: "func from nested getter", packageName: "funcfromnestedgetter"},
 		{name: "func literal", packageName: "funcliteral"},
 		{name: "interface method", packageName: "interfacemethod"},
