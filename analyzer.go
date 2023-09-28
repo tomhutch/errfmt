@@ -270,18 +270,30 @@ func crawlExprSelectorChain(pass *analysis.Pass, sel ast.Expr) []string {
 
 	indexExpr, ok := sel.(*ast.IndexExpr)
 	if ok {
-		indexExprIndex := crawlExprSelectorChain(pass, indexExpr.Index)
-		indexExprs := append(crawlExprSelectorChain(pass, indexExpr.X), indexExprIndex...)
-		for i := range indexExprs {
-			indexExprs[i] = strings.Replace(indexExprs[i], "\"", "", -1)
-			if i != 0 {
-				indexExprs[i] = fmt.Sprintf("[%s]", indexExprs[i])
-			}
-		}
-		return []string{strings.Join(indexExprs, "")}
+		return formatIndexExpr(
+			crawlExprSelectorChain(pass, indexExpr.X),
+			crawlExprSelectorChain(pass, indexExpr.Index),
+		)
 	}
 
 	return nil
+}
+
+// formatIndexExpr appends a formatted index expr index (i.e. a BasicLit map key) to the end of the index expression.
+func formatIndexExpr(indexExprX []string, indexExprIndexes []string) []string {
+	var index string
+	if len(indexExprIndexes) == 1 {
+		index = indexExprIndexes[0]
+		if strings.HasPrefix(index, "\"") {
+			index = strings.TrimPrefix(index, "\"")
+		}
+		if strings.HasSuffix(index, "\"") {
+			index = strings.TrimSuffix(index, "\"")
+		}
+		index = fmt.Sprintf("[%s]", index)
+	}
+	indexExprX[len(indexExprX)-1] = indexExprX[len(indexExprX)-1] + index
+	return indexExprX
 }
 
 // prevErrAssign traverses the AST of a file looking for the most recent

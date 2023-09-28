@@ -22,6 +22,23 @@ func okFormat() error {
 	return nil
 }
 
+func okFormatMapAttribute() error {
+	allStadiums := map[string]stadium{
+		"Cambridge": {},
+	}
+	allVenues := struct {
+		stadiums map[string]stadium
+	}{
+		stadiums: allStadiums,
+	}
+	err := allVenues.stadiums["Cambridge"].Play()
+	if err != nil {
+		return fmt.Errorf("allVenues.stadiums[Cambridge].Play: %w", err)
+	}
+
+	return nil
+}
+
 func okFormatNested() error {
 	allVenues := map[string]map[string]stadium{
 		"stadiums": {

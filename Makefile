@@ -1,6 +1,6 @@
 .PHONY: test
 test:
-	go test -count=1 ./core/... -v
+	go test -count=1 ./... -v
 
 .PHONY: install
 install:
